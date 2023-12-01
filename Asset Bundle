@@ -1,0 +1,280 @@
+
+
+using System.Collections;
+using System.Collections.Generic;
+using System.IO;
+using UnityEngine;
+using UnityEngine.UI;
+using UnityEngine.SceneManagement;
+
+using UnityEngine.Networking;
+using System;
+
+namespace Stratcon
+{
+    public class AssetBundleLoader : MonoBehaviour
+    {
+        AssetBundle myloadedAssetBundle;
+        public GameObject RoomParent;
+        public static AssetBundleLoader instance;
+        private string url;
+
+        public GameObject buttonLabel;
+        public GameObject loadingPrefab;
+        public Button PlayMissionButton;
+
+        // private String assetBundleURL = "https://imarticus-games.s3.ap-south-1.amazonaws.com/stratonboard/downloads/assetbundle/";
+
+        private void Start()
+        {
+            instance = this;
+
+        }
+
+        public void LoadAssetBundle(string currentRoomName, string bundleURL, Action<bool> Environment)
+        {
+            string webgl = "webgl/";
+            string android = "android/";
+            string ios = "ios/";
+
+            // currentRoomName = assetBundleURL + bundleURL;
+            String assetBundleURL = "";
+            Stratcon.ApiBase.envconfig.TryGetValue(Stratcon.ApiBase.CONFIG.RESOURCEPATH, out assetBundleURL);
+
+#if (UNITY_EDITOR || UNITY_WEBGL)
+            url = assetBundleURL + webgl + bundleURL;
+
+#elif (UNITY_ANDROID)
+                url = assetBundleURL + android + bundleURL;
+
+#elif (UNITY_IOS)
+                url = assetBundleURL + ios + bundleURL;
+
+#endif
+
+            RoomParent = GameObject.Find(currentRoomName);
+            // UnityWebRequest www = new UnityWebRequest(url);
+
+            //Debug.Log("................" + url);
+            string assetPrefabName = currentRoomName.Split("_")[0] + "_PROPS";
+            assetPrefabName = assetPrefabName.ToUpper();
+            StartCoroutine(WebReq(url, assetPrefabName, RoomParent.transform, Environment, 0));//start Coroutine for Fetching data from the url passed as parameter , for the first 
+                                                                                               // time the retry index is 0 (retry index added by Kruti)
+
+        }
+
+
+        IEnumerator WebReq(string Url, string AssetName, Transform Parent, Action<bool> Environment, int retryIndex)
+        {
+            AssetBundle.UnloadAllAssetBundles(true);
+
+            //Debug.Log("room url : " + url);
+            using (UnityWebRequest request = UnityWebRequestAssetBundle.GetAssetBundle(Url))
+            {
+                //Debug.Log("AssetName in loadasset : " + AssetName);
+
+                yield return request.SendWebRequest();
+
+
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    AssetBundle bundle = DownloadHandlerAssetBundle.GetContent(request);
+                    GameObject obj = (GameObject)bundle.LoadAsset(AssetName);
+                    Instantiate(obj, Parent);
+                    Environment(true);
+                    // Debug.Log("room downloaded completed: " + AssetName);
+                }
+
+                else if ((request.result != UnityWebRequest.Result.Success || request.result == UnityWebRequest.Result.ConnectionError
+                || request.result == UnityWebRequest.Result.ProtocolError) && retryIndex <= 2)
+                // Condition added by Kruti if web request result is not success or have any error and no of retry is less than 4 
+                {
+                    yield return new WaitForSeconds(1f);
+                    retryIndex++;                            // increase the retry index and start the coroutine again
+                    // Debug.Log("AssetBundle Reloaded");
+                    StartCoroutine(WebReq(Url, AssetName, Parent, Environment, retryIndex));
+                }
+
+
+                else if ((request.result != UnityWebRequest.Result.Success || request.result == UnityWebRequest.Result.ProtocolError ||
+                request.result == UnityWebRequest.Result.ConnectionError) && retryIndex >= 3)
+                {
+                    // if the scene names are either auraland , gameload or avatar selection
+                    //call network popup controller script and check if the network error pop up is open or not
+
+                    if (NetworkPopUpController.Instance.transform.localScale != Vector3.one)
+                    {
+                        NetworkPopUpController.Instance.Show("Poor Internet Connection Please Try Again Later");
+                    }
+
+                }
+
+            }
+
+        }
+
+        public void LoadAssetBundle(string bundleURL, Transform avatarPos, string employeeName, List<EYWAInteractableSpawner.CHARACTERS> charDtls, Action<GameObject, Transform, List<EYWAInteractableSpawner.CHARACTERS>> employee)
+        {
+            string webgl = "webgl/";
+            string android = "android/";
+            string ios = "ios/";
+
+            String assetBundleURL = "";
+            Stratcon.ApiBase.envconfig.TryGetValue(Stratcon.ApiBase.CONFIG.RESOURCEPATH, out assetBundleURL);
+
+#if (UNITY_EDITOR || UNITY_WEBGL)
+                url = assetBundleURL + webgl + bundleURL;
+
+#elif (UNITY_ANDROID)
+                url = assetBundleURL + android + bundleURL;
+
+#elif (UNITY_IOS)
+                url = assetBundleURL + ios + bundleURL;
+                
+#endif
+
+            //Debug.Log("avatar url : " + url);
+           // UnityWebRequest www = new UnityWebRequest(url);
+            StartCoroutine(WebReq(url, employeeName, avatarPos, charDtls, employee, 0));
+            //Debug.Log("employeeName in loadasset : " + employeeName);
+        }
+
+
+        IEnumerator WebReq(string Url, string AssetName, Transform avatarPos, List<EYWAInteractableSpawner.CHARACTERS> charDtls, Action<GameObject, Transform, List<EYWAInteractableSpawner.CHARACTERS>> Employee, int retryCounter)
+        {
+            //AssetBundle.UnloadAllAssetBundles(true);
+            //Debug.Log("asset url : " + url);
+            using (UnityWebRequest request = UnityWebRequestAssetBundle.GetAssetBundle(Url))
+
+            {
+                //Debug.Log(request);
+                //Debug.Log("AssetName in loadasset : " + AssetName);
+                yield return request.SendWebRequest();
+
+
+
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    AssetBundle bundle = DownloadHandlerAssetBundle.GetContent(request);
+                    GameObject obj = (GameObject)bundle.LoadAsset(AssetName);
+
+                    if (AssetName.Contains("CUST_MALE") && PlayerParamController.instance.custMale == null)
+                    {
+                        PlayerParamController.instance.custMale = bundle;
+                    }
+
+                    if (AssetName.Contains("CUST_FEMALE") && PlayerParamController.instance.custFemale == null)
+                    {
+                        PlayerParamController.instance.custFemale = bundle;
+                    }
+
+                    GameObject avatar = Instantiate(obj, avatarPos);
+                    avatar.name = AssetName;
+                    Employee(avatar, avatarPos, charDtls);
+                    // Debug.Log("avatar downloading Completed : " + AssetName);
+                }
+
+                else if ((request.result != UnityWebRequest.Result.Success || request.result == UnityWebRequest.Result.ConnectionError
+                || request.result == UnityWebRequest.Result.ProtocolError) && retryCounter <= 2)
+                // Condition added by Kruti if web request result is not success or have any error and no of retry is less than 4 
+                {
+                    yield return new WaitForSeconds(1f);
+                    retryCounter++;                              // increase the retry index and start the coroutine again
+                    // Debug.Log("AssetBundle Reloaded");
+                    StartCoroutine(WebReq(Url, AssetName, avatarPos, charDtls, Employee, retryCounter));
+                }
+
+
+                else if ((request.result != UnityWebRequest.Result.Success || request.result == UnityWebRequest.Result.ProtocolError ||
+                request.result == UnityWebRequest.Result.ConnectionError) && retryCounter >= 3)
+                {
+                    if (NetworkPopUpController.Instance.transform.localScale != Vector3.one)
+                    {
+                        NetworkPopUpController.Instance.Show("Poor Internet Connection Please Try Again Later");
+                    }
+
+                }
+            }
+
+        }
+
+
+        public void LoadStaticAvatarAssetbundle(string bundleurl, string avatarname, Transform avatarPos, List<EYWAInteractableSpawner.CHARACTERS> charDtls, Action<GameObject, Transform, List<EYWAInteractableSpawner.CHARACTERS>> Employee,string AvatarAnimation)
+        {
+            string webgl = "webgl/";
+            string android = "android/";
+            string ios = "ios/";
+
+            String assetBundleURL = "";
+            Stratcon.ApiBase.envconfig.TryGetValue(Stratcon.ApiBase.CONFIG.RESOURCEPATH, out assetBundleURL);
+
+            #if (UNITY_EDITOR || UNITY_WEBGL)
+                        url = assetBundleURL + webgl + bundleurl;
+
+            #elif (UNITY_ANDROID)
+                                 url = assetBundleURL + android + bundleurl;
+
+            #elif (UNITY_IOS)
+                                url = assetBundleURL + ios + bundleurl;
+                
+            #endif
+
+            //Debug.Log("avatar url : " + url);
+            UnityWebRequest www = new UnityWebRequest(url);
+            StartCoroutine(WebReq1(url, avatarname, avatarPos, charDtls, Employee,AvatarAnimation));
+            //Debug.Log("employeeName in loadasset : " + avatarname);
+        }
+
+
+        IEnumerator WebReq1(string url, string avatarname, Transform avatarPos, List<EYWAInteractableSpawner.CHARACTERS> charDtls, Action<GameObject, Transform, List<EYWAInteractableSpawner.CHARACTERS>> Employee, string AvatarAnimation)
+        {
+           //AssetBundle.UnloadAllAssetBundles(true);
+            //Debug.Log("asset url : " + url);
+            using (UnityWebRequest request = UnityWebRequestAssetBundle.GetAssetBundle(url))
+
+            {
+                //Debug.Log(request);
+                //Debug.Log("AssetName in loadasset : " + avatarname);
+                yield return request.SendWebRequest();
+
+
+
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    AssetBundle bundle = DownloadHandlerAssetBundle.GetContent(request);
+                    GameObject obj = (GameObject)bundle.LoadAsset(avatarname);
+
+                    if (avatarname.Contains("CUST_MALE") && PlayerParamController.instance.custMale == null)
+                    {
+                        PlayerParamController.instance.custMale = bundle;
+                    }
+
+                    if (avatarname.Contains("CUST_FEMALE") && PlayerParamController.instance.custFemale == null)
+                    {
+                        PlayerParamController.instance.custFemale = bundle;
+                    }
+                  
+                    GameObject avatar = Instantiate(obj, avatarPos);
+                    avatar.name = avatarname;
+                    Employee(avatar, avatarPos, charDtls);
+                    // Debug.Log("avatar downloading Completed STATIC: " + avatarname);
+                    EYWAInteractableSpawner.instance.ApplyAnimationAndPositionToStaticAvatar(avatar, AvatarAnimation);
+                    
+                }
+
+                else
+                {
+                    // Debug.Log("Asset bundle reload");
+                    yield return new WaitForSeconds(1f);
+
+                    StartCoroutine(WebReq1(url, avatarname, avatarPos, charDtls, Employee, AvatarAnimation));
+
+
+                }
+            }
+        }
+
+    }
+
+}
+
